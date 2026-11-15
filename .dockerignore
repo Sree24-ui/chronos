@@ -1,0 +1,5 @@
+build
+build-cmake
+.git
+results/lab_*
+web

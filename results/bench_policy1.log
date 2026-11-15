@@ -1,0 +1,23 @@
+
+CHRONOS benchmark  n=1000000  trials=5 (+1 warmup)  clock-read=16.6 ns  [simulated replay, single thread]
+workload      strategy     Mops/s   avg ns     p50     p99    p99.9    max us   heapMB    allocs  migr ok
+uniform       tree          8.561      125     125     334      791    3499.9     77.5     90287     0 ok
+uniform       array        15.928       65      42     208      333    3323.8     77.8        39     0 ok
+uniform       adaptive     15.141       68      42     208      333    3440.3     77.8     16165     1 ok
+concentrated  tree         20.518       54      42     250      458      45.2     23.3      6171     0 ok
+concentrated  array        21.689       51      42     250      458      40.8     25.8         4     0 ok
+concentrated  adaptive     20.877       57      42     250      500     108.2     25.8       457     1 ok
+sparse        tree         13.728       80      83     209      375    2201.5     48.8    109301     0 ok
+sparse        array        18.146       60      42     208      333    2186.9     50.8        28     0 ok
+sparse        adaptive     13.334       81      83     209      416    2184.8     48.8    109302     0 ok
+high_cancel   tree         32.792       34      41     125      250      61.0     23.3      5363     0 ok
+high_cancel   array        37.600       33      41     125      250      53.8     25.8         4     0 ok
+high_cancel   adaptive     36.994       33      41     125      250      63.8     25.8       887     1 ok
+bursty        tree         11.794       90      83     292      500    1780.0     46.6     36887     0 ok
+bursty        array        18.815       57      42     209      375    1739.7     46.8        23     0 ok
+bursty        adaptive     17.556       61      42     209      416    1740.2     46.8     15654     1 ok
+mixed         tree         15.720       66      42     292      500      53.2     25.0     52911     0 ok
+mixed         array        23.757       50      42     209      375      41.0     25.8         4     0 ok
+mixed         adaptive     20.350       51      42     208      375     801.9     25.8     13266     1 ok
+
+wrote results/bench_policy1.json

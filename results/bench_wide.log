@@ -1,0 +1,29 @@
+
+CHRONOS benchmark  n=1000000  trials=3 (+1 warmup)  clock-read=16.1 ns  [simulated replay, single thread]
+workload      strategy     Mops/s   avg ns     p50     p99    p99.9    max us   heapMB    allocs  migr ok
+uniform       std           2.303      421     375    1125     2291    5509.2    111.7   2470008     0 ok
+uniform       tree          2.290      437     416    1125     1750    3273.0    124.3    777118     0 ok
+uniform       array        10.903       95      83     250      416    3338.6    396.3        39     0 ok
+uniform       adaptive     11.027      109      83     250      500    6214.9    396.3     13977     1 ok
+concentrated  std           8.758      110      83     541      959    1342.3     18.7   1109098     0 ok
+concentrated  tree         19.666       52      42     209      417      34.6     23.3      6171     0 ok
+concentrated  array        19.869       57      42     250      459      51.9    344.3         4     0 ok
+concentrated  adaptive     20.147       54      42     250      458      35.8     23.3      6172     0 ok
+sparse        std           8.378      120      84     333      708   10727.1     56.2   1595171     0 ok
+sparse        tree         13.191       83      83     250      417    2198.9     48.8    110267     0 ok
+sparse        array        16.937       65      42     208      333    2159.2    369.3        28     0 ok
+sparse        adaptive     14.433       73      42     209      375    6446.6    369.3      3241     1 ok
+high_cancel   std          12.781       76      83     250      500     531.4      6.0    739203     0 ok
+high_cancel   tree         31.168       36      41     166      250      51.2     23.3      5363     0 ok
+high_cancel   array        36.412       35      41     166      292      42.5    344.3         4     0 ok
+high_cancel   adaptive     31.084       36      41     166      291      32.1     23.3      5364     0 ok
+bursty        std           4.004      251     166     916     1292    8241.0     72.9   1813398     0 ok
+bursty        tree          4.519      222     125     875     1208    1780.5     73.2    410835     0 ok
+bursty        array        14.526       77      83     250      458    1736.3    365.3        23     0 ok
+bursty        adaptive     13.037       87      83     250      417    6404.5    365.3     14131     1 ok
+mixed         std           7.404      134      84     542     1000    6081.0     25.6   1181250     0 ok
+mixed         tree         14.263       78      42     375      666      73.3     26.3     80146     0 ok
+mixed         array        20.486       59      42     250      417      21.1    344.3         5     0 ok
+mixed         adaptive     18.134       60      42     209      375    5692.3    344.3      3910     1 ok
+
+wrote results/bench_wide.json

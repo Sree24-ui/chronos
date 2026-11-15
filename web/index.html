@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>CHRONOS · order matching engine</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body class="is-landing">
+
+<!-- ============================ LANDING ============================ -->
+<div id="landing">
+  <div id="lp"></div>
+  <div class="ln" role="navigation">
+    <a class="lb" href="#home">CHRON<b>O</b>S</a>
+    <div class="ll"><a href="#how">How it works</a><a href="#res">Results</a><a href="#safe">Correctness</a></div>
+    <a class="btn go sm" href="#overview">Open console <span>→</span></a>
+  </div>
+
+  <section class="hero">
+    <div class="hero-l">
+      <h1 class="rv" style="--d:.08s">Watch a market<br>match itself.<i class="cur"></i></h1>
+      <p class="lead rv" style="--d:.16s">A limit-order-book matching engine written from scratch: custom memory pool, hash-indexed orders, FIFO price levels, and a price index that rewires itself while it runs. Everything on this page is live from the engine.</p>
+      <div class="cta-row rv" style="--d:.24s"><a class="btn go" href="#overview">Open live console <span>→</span></a><a class="btn" href="#how">See how it works <span>↓</span></a></div>
+      <div class="hstats rv" style="--d:.32s"><div><b data-n="ops" data-f="ops">–</b><span>commands/s</span></div><div><b data-n="p99" data-f="ns">–</b><span>p99 latency</span></div><div><b id="hmode">–</b><span>price index</span></div></div>
+    </div>
+    <div class="hero-r rv" style="--d:.2s"><div class="hb" id="hb"><div class="hb-h"><span>LIVE ORDER BOOK</span><span id="hbs">connecting…</span></div><div id="hbr"></div></div></div>
+  </section>
+
+  <div class="tape" aria-label="Recent trades"><div class="tape-in" id="tape"></div></div>
+
+  <section class="nums">
+    <div class="rv"><b data-n="recv">–</b><span>orders received</span></div>
+    <div class="rv" style="--d:.06s"><b data-n="trades">–</b><span>trades executed</span></div>
+    <div class="rv" style="--d:.12s"><b data-n="active">–</b><span>resting orders</span></div>
+    <div class="rv" style="--d:.18s"><b data-n="levels">–</b><span>price levels</span></div>
+  </section>
+
+  <section class="how" id="how">
+    <div class="how-l"><div class="dg" id="dg"></div></div>
+    <div class="how-r">
+      <div class="sec-h rv"><div class="eyebrow">How one order is handled</div><h2>Five structures, each doing one job.</h2></div>
+      <div id="steps"></div>
+    </div>
+  </section>
+
+  <section class="res" id="res">
+    <div class="wrap">
+      <div class="sec-h rv"><div class="eyebrow">CHRONOS-ADAPT · measured, not assumed</div><h2>One index that picks its own shape.</h2>
+        <p class="lead">Tree or array+bitmap for price levels, switched at a safe batch boundary with every order validated before the swap. These bars come from the benchmark files in <code>results/</code>, replayed on identical workloads.</p></div>
+      <div class="ctl rv"><div class="seg" id="segBand"><button data-v="d" class="on">default band</button><button data-v="w">wide band (4M ticks)</button></div><div class="seg" id="segMet"><button data-v="ops" class="on">throughput</button><button data-v="mem">heap memory</button></div></div>
+      <div class="chart rv"><div class="legend" id="resLeg"></div><div class="bars" id="bars"></div></div>
+      <p class="insight rv" id="insight"></p>
+    </div>
+  </section>
+
+  <section class="safe" id="safe">
+    <div class="wrap">
+      <div class="sec-h rv"><div class="eyebrow">Correctness first</div><h2>Fast is worthless if it loses an order.</h2></div>
+      <div class="cards3">
+        <div class="lc rv"><h3>Strict price-time priority</h3><p>Best price first, earliest order first at a price. Replacing an order gives it a new sequence number, so nobody can jump the queue.</p></div>
+        <div class="lc rv" style="--d:.08s"><h3>Migration never moves an order</h3><p>When the index switches shape, order nodes are not copied. Price order, FIFO order and totals are validated before the old index is dropped, with rollback on failure.</p></div>
+        <div class="lc rv" style="--d:.16s"><h3>Checked against a slow oracle</h3><p>Randomized command streams, including bad IDs and prices, run through every engine variant and a simple O(n) reference. Trades and book state must match exactly.</p></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="final">
+    <div class="rv"><h2>Poke it.</h2><p>Submit orders, cancel them, switch the index strategy, or run a benchmark in its own process.</p><a class="btn go" href="#overview">Open live console <span>→</span></a></div>
+  </section>
+  <footer class="lf"><span>CHRONOS · synthetic data only · not a real exchange, no real money</span><span>Throughput figures are in-process simulated replay, not exchange throughput.</span></footer>
+</div>
+
+<!-- ============================ CONSOLE ============================ -->
+<div id="app">
+  <aside>
+    <a class="brand" href="#home">CHRON<b>O</b>S<small>order matching engine</small></a>
+    <nav id="nav"></nav>
+    <div class="keys"><button class="kb" id="kPal"><span>Command palette</span><kbd>⌘K</kbd></button><br>keys <kbd>1</kbd>–<kbd>7</kbd> switch page<br>synthetic data only<br>no real exchange or money</div>
+  </aside>
+  <main>
+    <header>
+      <div id="hdrTitle" class="title"></div>
+      <div class="pills">
+        <span class="pill" id="pConn"><i></i>connecting</span>
+        <span class="pill" id="pMode">mode –</span>
+        <span class="pill" id="pSim">sim off</span>
+      </div>
+    </header>
+    <section id="view"></section>
+  </main>
+</div>
+
+<div id="pal" class="pal" hidden><div class="pbox"><input id="pin" placeholder="Type a command or page…" autocomplete="off" spellcheck="false"><ul id="plist"></ul></div></div>
+<div id="toasts" aria-live="polite"></div>
+<script src="app.js"></script>
+<script src="landing.js"></script>
+</body>
+</html>

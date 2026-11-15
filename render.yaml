@@ -1,0 +1,6 @@
+services:
+  - type: web
+    name: chronos
+    runtime: docker
+    plan: free
+    healthCheckPath: /api/meta

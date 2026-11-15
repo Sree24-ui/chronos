@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>CHRONOS · a live stock-exchange matching engine</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body class="stage">
+<canvas id="bg" aria-hidden="true"></canvas>
+
+<header class="top">
+  <a class="mark" href="#">CHRONOS</a>
+  <nav id="nav" aria-label="Pages"></nav>
+</header>
+
+<!-- scroll story: fixed scenes whose opacity follows scroll progress; the spacer provides the scroll length -->
+<div id="spacer"></div>
+<div id="scenes">
+  <section class="sc" data-i="0">
+    <p class="tag"><span class="dot" id="liveDot"></span><span id="liveT">connecting to engine…</span></p>
+    <h1>A stock exchange,<br>running live in front of you.</h1>
+    <p class="prose">CHRONOS is a <b>matching engine</b>: the software at the heart of every exchange that pairs people who want to buy with people who want to sell, fairly and in microseconds. Here it runs on made-up traders, so you can watch it, poke it, and measure it.</p>
+    <div class="row"><a class="pill" href="#floor">Enter the trading floor</a><a class="ghost" href="#story" id="howBtn">How it works ↓</a></div>
+    <p class="why">Why it matters: on a real exchange every millisecond of matching delay costs money. This project explores how the data structures inside change that.</p>
+  </section>
+  <section class="sc" data-i="1"><p class="k">01 — ORDERS ARRIVE</p><h2>Buyers and sellers shout prices.</h2><p class="prose">Each order says three things: <b>buy or sell</b>, <b>how many</b>, and the <b>price</b> they will accept. Thousands arrive every second.</p><p class="big"><b data-n="recv">–</b><span>orders received so far</span></p></section>
+  <section class="sc" data-i="2"><p class="k">02 — PRICE FIRST, THEN TIME</p><h2>The best price always goes first.</h2><p class="prose">A buyer offering more beats a buyer offering less. At the same price, whoever arrived earlier is served first. The engine never breaks this rule, not even while it reorganises its own memory.</p><p class="big"><b data-n="active">–</b><span>orders waiting in the book</span></p></section>
+  <section class="sc" data-i="3"><p class="k">03 — TRADES PRINT</p><h2>When prices meet, a trade happens.</h2><p class="prose">The moment a buyer’s price reaches a seller’s, they trade, in part or in full. Cancels, changes and “buy at any price” orders are handled too.</p><p class="big"><b data-n="trades">–</b><span>trades executed</span></p></section>
+  <section class="sc" data-i="4"><p class="k">NOW YOU DRIVE</p><h2>Place orders. Break things. Measure it.</h2><p class="prose">Submit your own orders, watch the book react, switch the internal data structure, or run a benchmark and see exactly how much faster one design is than another.</p><div class="row"><a class="pill" href="#floor">Enter the trading floor</a><a class="ghost" href="#lab">Open the benchmark lab</a></div></section>
+  <div class="hint" id="hint">scroll</div>
+</div>
+
+<main id="view" hidden></main>
+<div id="toasts" aria-live="polite"></div>
+<script src="app.js"></script>
+</body>
+</html>

@@ -1,0 +1,38 @@
+cmake_minimum_required(VERSION 3.16)
+project(chronos LANGUAGES CXX)
+
+set(CMAKE_CXX_STANDARD 20)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_EXTENSIONS OFF)
+if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
+  set(CMAKE_BUILD_TYPE Release)  # benchmarks are meaningless unoptimised
+endif()
+
+option(CHRONOS_SANITIZE "Build with AddressSanitizer + UBSan (slow; for tests)" OFF)
+option(CHRONOS_TSAN "Build with ThreadSanitizer (server/concurrency checks)" OFF)
+
+add_library(chronos_flags INTERFACE)
+target_include_directories(chronos_flags INTERFACE include)
+target_compile_options(chronos_flags INTERFACE -Wall -Wextra)
+find_package(Threads REQUIRED)
+if(CHRONOS_SANITIZE)
+  target_compile_options(chronos_flags INTERFACE -fsanitize=address,undefined -fno-sanitize-recover=undefined -g -O1)
+  target_link_options(chronos_flags INTERFACE -fsanitize=address,undefined)
+elseif(CHRONOS_TSAN)
+  target_compile_options(chronos_flags INTERFACE -fsanitize=thread -g -O1)
+  target_link_options(chronos_flags INTERFACE -fsanitize=thread)
+endif()
+
+add_executable(chronos_tests tests/test.cpp)
+add_executable(chronos_bench src/bench_main.cpp)
+add_executable(chronos_server src/server.cpp)
+foreach(t chronos_tests chronos_bench chronos_server)
+  target_link_libraries(${t} PRIVATE chronos_flags Threads::Threads)
+endforeach()
+
+enable_testing()
+add_test(NAME correctness COMMAND chronos_tests)
+add_test(NAME soak COMMAND chronos_tests 100 2000)
+set_tests_properties(soak PROPERTIES LABELS slow)
+# tiny end-to-end benchmark: all four strategies must agree on the trade stream (exit code 1 if not)
+add_test(NAME bench_consistency COMMAND chronos_bench --n 20000 --trials 1 --warmup 0 --out ${CMAKE_BINARY_DIR}/bench_ctest.json)
