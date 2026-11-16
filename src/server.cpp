@@ -2,12 +2,27 @@
 //   ./build/chronos_server [--port 8080] [--host 127.0.0.1] [--web web] [--bench ./build/chronos_bench|none] [--results results] [--idle-stop SECONDS]
 // The engine lives behind one mutex; the simulator/REST handlers take it per small chunk and the
 // broadcaster takes it for ~microseconds to copy a snapshot. Rendering happens in the browser.
+#if defined(_WIN32)
+#define NOMINMAX
+#define WIN32_LEAN_AND_MEAN
+#include <winsock2.h>
+#include <ws2tcpip.h>
+#ifdef _MSC_VER
+#pragma comment(lib, "ws2_32.lib")
+using ssize_t = intptr_t;
+#endif
+#define popen _popen
+#define pclose _pclose
+#define SHUT_RDWR SD_BOTH
+#else
 #include <arpa/inet.h>
-#include <dirent.h>
 #include <netinet/in.h>
-#include <signal.h>
 #include <sys/socket.h>
 #include <unistd.h>
+#endif
+#include <signal.h>
+
+#include <filesystem>
 
 #include <algorithm>
 #include <atomic>
@@ -27,6 +42,27 @@
 #include "chronos/workload.hpp"
 
 using namespace chronos;
+
+// Socket calls that differ between POSIX and Winsock.
+static void closeSock(int fd) {
+#if defined(_WIN32)
+  closesocket(SOCKET(fd));
+#else
+  close(fd);
+#endif
+}
+static void setTimeout(int fd, int opt, long sec, long usec) {  // opt: SO_RCVTIMEO / SO_SNDTIMEO
+#if defined(_WIN32)
+  DWORD ms = DWORD(sec * 1000 + usec / 1000);
+  setsockopt(SOCKET(fd), SOL_SOCKET, opt, (const char*)&ms, sizeof ms);
+#else
+  timeval tv;
+  tv.tv_sec = sec, tv.tv_usec = decltype(tv.tv_usec)(usec);
+  setsockopt(fd, SOL_SOCKET, opt, &tv, sizeof tv);
+#endif
+}
+static ssize_t rcv(int fd, void* b, size_t n) { return recv(fd, (char*)b, int(n), 0); }
+static ssize_t snd(int fd, const void* b, size_t n) { return send(fd, (const char*)b, int(n), 0); }
 
 // ---------------------------------------------------------------- small utilities
 static std::string sha1(const std::string& s) {
@@ -297,7 +333,7 @@ static void benchThread(std::string cmd, std::string file) {
 // ---------------------------------------------------------------- HTTP
 static bool sendAll(int fd, const char* d, size_t n) {
   while (n) {
-    ssize_t k = send(fd, d, n, 0);
+    ssize_t k = snd(fd, d, std::min<size_t>(n, 1 << 20));
     if (k <= 0) return false;
     d += k, n -= size_t(k);
   }
@@ -360,12 +396,10 @@ static void handleApi(int fd, const std::string& method, const std::string& path
   }
   if (method == "GET" && path == "/api/bench/list") {
     std::string j = "[";
-    if (DIR* d = opendir(gResults.c_str())) {
-      while (dirent* e = readdir(d)) {
-        std::string n = e->d_name;
-        if (n.size() > 5 && n.compare(n.size() - 5, 5, ".json") == 0 && safeName(n)) j += (j.size() > 1 ? "," : "") + std::string("\"") + n + "\"";
-      }
-      closedir(d);
+    std::error_code ec;
+    for (std::filesystem::directory_iterator it(gResults, ec), end; !ec && it != end; it.increment(ec)) {
+      std::string n = it->path().filename().string();
+      if (n.size() > 5 && n.compare(n.size() - 5, 5, ".json") == 0 && safeName(n)) j += (j.size() > 1 ? "," : "") + std::string("\"") + n + "\"";
     }
     return reply(fd, 200, "application/json", j + "]");
   }
@@ -514,7 +548,7 @@ static std::string wsFrame(const std::string& p) {
 static bool readExact(int fd, void* b, size_t n) {
   char* p = (char*)b;
   while (n) {
-    ssize_t k = recv(fd, p, n, 0);
+    ssize_t k = rcv(fd, p, n);
     if (k <= 0) return false;
     p += k, n -= size_t(k);
   }
@@ -545,7 +579,7 @@ static void wsReader(int fd) {
     std::lock_guard<std::mutex> lk(gWsM);
     gWs.erase(std::remove(gWs.begin(), gWs.end(), fd), gWs.end());
   }
-  close(fd);
+  closeSock(fd);
 }
 static void broadcaster() {
   int idle = 0;  // ticks (250 ms) with no viewer
@@ -571,8 +605,7 @@ static void broadcaster() {
 
 // ---------------------------------------------------------------- connection handling
 static void handle(int fd) {
-  timeval tv{10, 0};
-  setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof tv);
+  setTimeout(fd, SO_RCVTIMEO, 10, 0);
 #ifdef SO_NOSIGPIPE  // macOS; Linux relies on signal(SIGPIPE, SIG_IGN) in main
   int one = 1;
   setsockopt(fd, SOL_SOCKET, SO_NOSIGPIPE, &one, sizeof one);
@@ -581,8 +614,8 @@ static void handle(int fd) {
   char buf[4096];
   size_t hend;
   while ((hend = req.find("\r\n\r\n")) == std::string::npos) {
-    ssize_t k = recv(fd, buf, sizeof buf, 0);
-    if (k <= 0 || req.size() > 65536) return void(close(fd));
+    ssize_t k = rcv(fd, buf, sizeof buf);
+    if (k <= 0 || req.size() > 65536) return void(closeSock(fd));
     req.append(buf, size_t(k));
   }
   std::string head = req.substr(0, hend), body = req.substr(hend + 4);
@@ -608,9 +641,8 @@ static void handle(int fd) {
     std::string acc = b64(sha1(hd["sec-websocket-key"] + "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"));
     std::string r = "HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Accept: " + acc + "\r\n\r\n";
     sendAll(fd, r.data(), r.size());
-    timeval none{0, 0}, snd{0, 200000};
-    setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &none, sizeof none);
-    setsockopt(fd, SOL_SOCKET, SO_SNDTIMEO, &snd, sizeof snd);
+    setTimeout(fd, SO_RCVTIMEO, 0, 0);
+    setTimeout(fd, SO_SNDTIMEO, 0, 200000);
     {
       std::lock_guard<std::mutex> lk(gWsM);
       gWs.push_back(fd);
@@ -618,10 +650,10 @@ static void handle(int fd) {
     return wsReader(fd);
   }
   size_t want = hd.count("content-length") ? std::strtoul(hd["content-length"].c_str(), 0, 10) : 0;
-  if (want > (1 << 20)) return err(fd, 400, "body too large"), void(close(fd));
+  if (want > (1 << 20)) return err(fd, 400, "body too large"), void(closeSock(fd));
   while (body.size() < want) {
-    ssize_t k = recv(fd, buf, sizeof buf, 0);
-    if (k <= 0) return void(close(fd));
+    ssize_t k = rcv(fd, buf, sizeof buf);
+    if (k <= 0) return void(closeSock(fd));
     body.append(buf, size_t(k));
   }
   if (path.rfind("/api/", 0) == 0) handleApi(fd, method, path, query, body);
@@ -633,7 +665,7 @@ static void handle(int fd) {
     if (ok) reply(fd, 200, ctypeOf(f), data);
     else err(fd, 404, "not found");
   } else err(fd, 404, "not found");
-  close(fd);
+  closeSock(fd);
 }
 
 int main(int argc, char** argv) {
@@ -654,11 +686,19 @@ int main(int argc, char** argv) {
     else { std::fprintf(stderr, "unknown flag %s\n", k.c_str()); return 2; }
   }
   if (gBand.hi <= gBand.lo || gBand.hi > (1 << 24) || gBatch < 64) { std::fprintf(stderr, "bad --band-hi (1..16777216) or --batch (>=64)\n"); return 2; }
+#ifdef SIGPIPE
   signal(SIGPIPE, SIG_IGN);
+#endif
+#if defined(_WIN32)
+  WSADATA wsa;
+  if (WSAStartup(MAKEWORD(2, 2), &wsa) != 0) { std::fprintf(stderr, "WSAStartup failed\n"); return 1; }
+#endif
   L.reset(Mode::Adaptive);
-  int s = socket(AF_INET, SOCK_STREAM, 0);
+  int s = int(socket(AF_INET, SOCK_STREAM, 0));
+#if !defined(_WIN32)  // on Windows SO_REUSEADDR would let another process steal the port
   int one = 1;
   setsockopt(s, SOL_SOCKET, SO_REUSEADDR, &one, sizeof one);
+#endif
   sockaddr_in a{};
   a.sin_family = AF_INET, a.sin_port = htons(uint16_t(port)), a.sin_addr.s_addr = 0;
   if (inet_pton(AF_INET, host.c_str(), &a.sin_addr) != 1) { std::fprintf(stderr, "bad --host (IPv4 address expected)\n"); return 2; }
@@ -669,15 +709,15 @@ int main(int argc, char** argv) {
   std::printf("CHRONOS gateway on http://%s:%d  (web=%s, bench=%s)\n", host.c_str(), port, gWeb.c_str(), gBenchBin.c_str());
   std::fflush(stdout);
   while (true) {
-    int c = accept(s, nullptr, nullptr);
+    int c = int(accept(s, nullptr, nullptr));
     if (c < 0) { std::this_thread::sleep_for(std::chrono::milliseconds(10)); continue; }  // e.g. EMFILE: do not spin
-    if (gConn >= kMaxConn) { close(c); continue; }  // refuse floods instead of spawning unbounded threads
+    if (gConn >= kMaxConn) { closeSock(c); continue; }  // refuse floods instead of spawning unbounded threads
     ++gConn;
     try {  // a failed thread start or an exception in a handler must drop one connection, never the server
       std::thread([c] {
-        try { handle(c); } catch (...) { close(c); }
+        try { handle(c); } catch (...) { closeSock(c); }
         --gConn;
       }).detach();
-    } catch (...) { close(c); --gConn; }
+    } catch (...) { closeSock(c); --gConn; }
   }
 }

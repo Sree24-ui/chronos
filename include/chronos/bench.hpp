@@ -2,7 +2,13 @@
 // Benchmark harness: identical pre-generated command stream replayed on every strategy.
 // Per trial: (A) throughput pass - no per-op timing; counts heap allocations and live heap bytes.
 //            (B) latency pass    - per-op steady_clock samples; trades hashed *outside* the timed region.
+#if defined(_WIN32)
+#define NOMINMAX
+#define WIN32_LEAN_AND_MEAN
+#include <windows.h>
+#else
 #include <sys/resource.h>
+#endif
 
 #include <algorithm>
 #include <chrono>
@@ -17,7 +23,7 @@
 #include "workload.hpp"
 #if defined(__APPLE__)
 #include <malloc/malloc.h>
-#else
+#elif !defined(_WIN32)
 #include <malloc.h>
 #endif
 
@@ -26,20 +32,30 @@ namespace chronos::bench {
 // Optional global allocation counters; filled only by binaries that replace operator new (bench_main.cpp).
 inline bool g_count = false;
 inline uint64_t g_allocs = 0, g_frees = 0;
+inline size_t g_liveBytes = 0;  // Windows only: bench_main.cpp keeps it current (no malloc statistics API there); 0 elsewhere/untracked
 
 inline size_t heapInUse() {
 #if defined(__APPLE__)
   malloc_statistics_t s;
   malloc_zone_statistics(nullptr, &s);
   return s.size_in_use;
+#elif defined(_WIN32)
+  return g_liveBytes;
 #else
   return mallinfo2().uordblks;
 #endif
 }
 inline double cpuSeconds() {
+#if defined(_WIN32)
+  FILETIME c, e, k, u;
+  GetProcessTimes(GetCurrentProcess(), &c, &e, &k, &u);
+  auto t = [](FILETIME f) { return double((uint64_t(f.dwHighDateTime) << 32) | f.dwLowDateTime) * 1e-7; };
+  return t(k) + t(u);
+#else
   rusage r;
   getrusage(RUSAGE_SELF, &r);
   return r.ru_utime.tv_sec + r.ru_stime.tv_sec + 1e-6 * (r.ru_utime.tv_usec + r.ru_stime.tv_usec);
+#endif
 }
 using Clk = std::chrono::steady_clock;
 inline uint64_t nowNs() { return std::chrono::duration_cast<std::chrono::nanoseconds>(Clk::now().time_since_epoch()).count(); }

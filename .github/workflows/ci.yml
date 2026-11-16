@@ -1,0 +1,45 @@
+name: CI
+on:
+  push:
+  pull_request:
+
+jobs:
+  build-test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure
+        run: cmake -S . -B build
+      - name: Build
+        run: cmake --build build --config Release --parallel
+      - name: Test (correctness, soak, benchmark consistency)
+        run: ctest --test-dir build -C Release --output-on-failure
+      - name: Server smoke test (HTTP + WebSocket-free API round trip)
+        shell: bash
+        run: |
+          exe=build/chronos_server; [ -f "$exe" ] || exe=build/Release/chronos_server.exe
+          "$exe" --port 18080 --web web2 --bench none &
+          pid=$!
+          for i in $(seq 1 30); do curl -sf http://127.0.0.1:18080/api/meta >/dev/null && break; sleep 1; done
+          curl -sf http://127.0.0.1:18080/api/meta >/dev/null
+          curl -sf -X POST http://127.0.0.1:18080/api/order -d '{"side":"buy","type":"limit","qty":10,"price":100}' | grep -q resting
+          curl -sf -X POST http://127.0.0.1:18080/api/order -d '{"side":"sell","type":"limit","qty":4,"price":100}' | grep -q filled
+          curl -sf -X POST http://127.0.0.1:18080/api/sim -d '{"action":"start","workload":"mixed","rate":20000}' >/dev/null
+          sleep 2
+          curl -sf http://127.0.0.1:18080/api/state | grep -q '"sim":true'
+          curl -sf http://127.0.0.1:18080/ | grep -qi chronos
+          kill $pid
+
+  linux-sanitizers:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: ASan + UBSan, longer soak
+        run: |
+          cmake -S . -B build-asan -DCHRONOS_SANITIZE=ON -DCMAKE_BUILD_TYPE=Debug
+          cmake --build build-asan --target chronos_tests --parallel
+          ./build-asan/chronos_tests 100 2000

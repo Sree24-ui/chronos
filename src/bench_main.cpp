@@ -1,6 +1,10 @@
 // chronos_bench: replays identical synthetic workloads on std / tree / array / adaptive engines.
 //   ./chronos_bench --n 500000 --trials 3 --out results/bench.json
+#if !defined(_WIN32)
 #include <sys/utsname.h>
+#else
+#include <malloc.h>  // _msize
+#endif
 
 #include <cstdio>
 #include <cstdlib>
@@ -17,11 +21,19 @@ using namespace chronos::bench;
 // Count heap traffic (only while g_count is set, i.e. during the throughput pass).
 void* operator new(size_t n) {
   if (g_count) ++g_allocs;
-  if (void* p = std::malloc(n)) return p;
+  if (void* p = std::malloc(n)) {
+#if defined(_WIN32)
+    g_liveBytes += _msize(p);
+#endif
+    return p;
+  }
   throw std::bad_alloc();
 }
 void operator delete(void* p) noexcept {
   if (g_count && p) ++g_frees;
+#if defined(_WIN32)
+  if (p) g_liveBytes -= _msize(p);
+#endif
   std::free(p);
 }
 void operator delete(void* p, size_t) noexcept { operator delete(p); }
@@ -84,17 +96,35 @@ int main(int argc, char** argv) {
   const double clk = clockOverheadNs();
   auto rs = run(o);
 
+#if defined(_WIN32)
+  const char *osName = "Windows", *osRel = "", *arch =
+#if defined(_M_ARM64)
+      "arm64";
+#else
+      "x86_64";
+#endif
+  const std::string compiler = "MSVC " + std::to_string(_MSC_FULL_VER);
+  const bool optimized =
+#ifdef NDEBUG
+      true;
+#else
+      false;
+#endif
+#else
   utsname u;
   uname(&u);
+  const char *osName = u.sysname, *osRel = u.release, *arch = u.machine;
+  const std::string compiler = __VERSION__;
+  const bool optimized =
+#ifdef __OPTIMIZE__
+      true;
+#else
+      false;
+#endif
+#endif
   char env[512];
   std::snprintf(env, sizeof env, "{\"os\":\"%s %s\",\"arch\":\"%s\",\"compiler\":\"%s\",\"optimized\":%s,\"clockReadNs\":%.1f,\"note\":\"simulated in-process replay; not exchange throughput\"}",
-                u.sysname, u.release, u.machine, __VERSION__,
-#ifdef __OPTIMIZE__
-                "true",
-#else
-                "false",
-#endif
-                clk);
+                osName, osRel, arch, compiler.c_str(), optimized ? "true" : "false", clk);
   std::ofstream f(out);
   if (!f) { std::fprintf(stderr, "cannot write %s (does the directory exist?)\n", out.c_str()); return 1; }
   f << toJson(rs, o, env);
