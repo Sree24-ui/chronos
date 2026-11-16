@@ -56,6 +56,8 @@ Run it from the project root (it serves `web2/` and reads `results/` relative to
 
 ## Deploy
 
+Live demo: https://chronos-kxec.onrender.com (free tier: the first visit after idle takes a moment to wake; every push to `main` redeploys it automatically).
+
 `Dockerfile` + `render.yaml` run the dashboard on a host such as Render: `docker build -t chronos . && docker run -p 8080:8080 chronos`. The image builds with g++ 13, runs the test suite during the build, serves `web2/` and the three stored result files, listens on `$PORT` / `0.0.0.0`, **disables live benchmark runs** (`--bench none`, they would let any visitor burn CPU), caps the book at 200k resting orders and pauses the simulator 2 minutes after the last viewer leaves. There is **no authentication**: every visitor shares one engine and can start/stop the simulator or reset the book. Use it as a demo, not as a service.
 
 ## Windows
