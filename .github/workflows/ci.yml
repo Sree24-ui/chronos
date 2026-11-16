@@ -43,3 +43,16 @@ jobs:
           cmake -S . -B build-asan -DCHRONOS_SANITIZE=ON -DCMAKE_BUILD_TYPE=Debug
           cmake --build build-asan --target chronos_tests --parallel
           ./build-asan/chronos_tests 100 2000
+
+  deploy:
+    # Render did not receive GitHub push events, so deploy through its deploy hook, only after every CI job passed.
+    needs: [build-test, linux-sanitizers]
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger Render deploy
+        env:
+          HOOK: ${{ secrets.RENDER_DEPLOY_HOOK }}
+        run: |
+          if [ -z "$HOOK" ]; then echo "RENDER_DEPLOY_HOOK secret not set; skipping deploy"; exit 0; fi
+          curl -fsS -X POST "$HOOK" >/dev/null && echo "deploy requested"
