@@ -19,7 +19,7 @@ Unverified starting points only: general descriptions of order-book implementati
 
 ## 4. Technical advantages (measured, with caveats)
 
-From `docs/RESULTS.md`, on synthetic workloads on one laptop: in a wide price band, adaptive kept a tree-sized heap (e.g. 23 MB vs 344 MB for the array in the `concentrated` workload, equal throughput) and array-level throughput where the book had many levels (e.g. 11.0 vs 2.3 Mops/s for the tree in `uniform`). Costs: a one-off migration of 0.18–0.67 ms (default band) or 5.6–6.7 ms (wide band); **no p99 improvement**; throughput below fixed array in some workloads (e.g. 31.1 vs 36.4 Mops/s in wide `high_cancel`); most default-band adaptive-vs-array differences are inside run-to-run noise.
+From `docs/RESULTS.md`, on synthetic workloads on one laptop: in a wide price band, adaptive kept a tree-sized heap (e.g. 23 MB vs 344 MB for the array in the `concentrated` workload, equal throughput) and array-level throughput where the book had many levels (e.g. 11.0 vs 2.3 Mops/s for the tree in `uniform`). Costs: a one-off migration of 0.18–0.67 ms (default band) or 5.6–6.7 ms (wide band); **no p99 improvement**; on held-out runs (a workload written after the thresholds were frozen, plus a fresh seed) adaptive was typically 0.9–1.0× of fixed array on speed and, in the wide band, chose the large array and saved no memory; throughput below fixed array in some workloads (e.g. 31.1 vs 36.4 Mops/s in wide `high_cancel`); most default-band adaptive-vs-array differences are inside run-to-run noise.
 
 ## 5. Experimental evidence
 

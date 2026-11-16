@@ -14,7 +14,7 @@ RUN useradd -m app
 WORKDIR /app
 COPY --from=build /src/chronos_server .
 COPY web2 web2
-COPY results/bench_default.json results/bench_policy1.json results/bench_wide.json results/
+COPY results/*.json results/
 USER app
 EXPOSE 8080
 # PORT is set by the host (Render etc.); the simulator pauses itself 2 minutes after the last viewer leaves.

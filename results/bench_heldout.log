@@ -1,0 +1,9 @@
+
+CHRONOS benchmark  n=1000000  trials=5 (+1 warmup)  clock-read=17.2 ns  [simulated replay, single thread]
+workload      strategy     Mops/s   avg ns     p50     p99    p99.9    max us   heapMB    allocs  migr ok
+market_like   std          12.433       79      83     458     1334     135.8      1.8    764688     0 ok
+market_like   tree         21.196       51      42     250      792      47.8     23.4     22612     0 ok
+market_like   array        24.004       50      42     250      792     149.1     25.8         6     0 ok
+market_like   adaptive     21.515       59      42     333     1083     570.8     25.8     16535     1 ok
+
+wrote results/bench_heldout.json

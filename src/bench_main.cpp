@@ -1,5 +1,6 @@
 // chronos_bench: replays identical synthetic workloads on std / tree / array / adaptive engines.
 //   ./chronos_bench --n 500000 --trials 3 --out results/bench.json
+//   ./chronos_bench --lobster AAPL_..._message_10.csv --out results/lobster.json   (recorded LOBSTER-format messages)
 #if !defined(_WIN32)
 #include <sys/utsname.h>
 #else
@@ -14,6 +15,7 @@
 #include <sstream>
 
 #include "chronos/bench.hpp"
+#include "chronos/lobster.hpp"
 
 using namespace chronos;
 using namespace chronos::bench;
@@ -50,6 +52,7 @@ int main(int argc, char** argv) {
   o.base.n = 500000;
   std::string out = "results/bench.json", csv;
   bool progress = false;
+  std::string lobster;
   for (int i = 1; i < argc; ++i) {
     std::string k = argv[i];
     auto val = [&]() -> const char* {
@@ -78,6 +81,7 @@ int main(int argc, char** argv) {
     else if (k == "--out") out = val();
     else if (k == "--csv") csv = val();
     else if (k == "--progress") progress = true;
+    else if (k == "--lobster") lobster = val();
     else if (k == "--strategies") o.strategies = split(val());
     else if (k == "--workloads") {
       o.workloads.clear();
@@ -93,6 +97,13 @@ int main(int argc, char** argv) {
   if (o.trials < 1 || o.base.n < 1000) { std::fprintf(stderr, "need --trials >= 1 and --n >= 1000\n"); return 2; }
   if (progress) o.progress = [](int d, int t, const std::string& w) { std::printf("PROGRESS %d %d %s\n", d, t, w.c_str()); std::fflush(stdout); };
 
+  if (!lobster.empty()) {
+    LobsterStats st;
+    o.replay = loadLobster(lobster, o.base.band, st);
+    o.replayName = "lobster";
+    if (o.replay.size() < 1000) { std::fprintf(stderr, "cannot read %s or fewer than 1000 usable messages\n", lobster.c_str()); return 2; }
+    std::fprintf(stderr, "lobster: %zu lines -> %zu commands (%zu new, %zu cancel, %zu partial-cancel, %zu execution->market); ignored %zu, outside band %zu, unparsable %zu\n", st.lines, o.replay.size(), st.submits, st.cancels, st.partials, st.execs, st.ignored, st.outOfBand, st.bad);
+  }
   const double clk = clockOverheadNs();
   auto rs = run(o);
 

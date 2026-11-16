@@ -1,11 +1,15 @@
 #!/usr/bin/env python3
 """Generate docs/RESULTS.md from results/*.json. Every number comes from those files; nothing is typed by hand.
    usage: python3 scripts/make_report.py   (run from the project root)"""
-import json, os, sys
+import glob, json, math, os, sys
 R = 'results'
 FILES = [('bench_default.json', 'Default band, policy v2 (the main experiment)'),
          ('bench_wide.json', 'Wide band (4,194,304 ticks), policy v2 (array footprint is large here)'),
-         ('bench_policy1.json', 'Default band, policy v1 (density rule; kept as a negative result)')]
+         ('bench_policy1.json', 'Default band, policy v1 (density rule; kept as a negative result)'),
+         ('bench_heldout.json', 'HELD-OUT: `market_like` workload (written after the thresholds were frozen), default band'),
+         ('bench_heldout_wide.json', 'HELD-OUT: `market_like`, wide band'),
+         ('bench_newseed.json', 'HELD-OUT: the original six workloads on a fresh seed (thresholds frozen)'),
+         ('lobster.json', 'Recorded LOBSTER-format market data replay')]
 NAMES = {'std': 'STL baseline', 'tree': 'tree', 'array': 'array', 'adaptive': 'adaptive'}
 def load(f):
     p = os.path.join(R, f)
@@ -40,5 +44,17 @@ for f, title in FILES:
         out += ['', f"Workloads where adaptive's and array's per-trial throughput ranges overlap (difference not distinguishable from run-to-run noise): {', '.join(ov) if ov else 'none'}."]
     bad = [f"{r['workload']}/{r['strategy']}" for r in rs if not r['consistent']]
     out += ['', 'Consistency check: ' + ('**FAILED for ' + ', '.join(bad) + '**' if bad else 'all strategies agree on every workload.'), '']
+ms = sorted(glob.glob(os.path.join(R, 'machines', '*.json')))
+if ms:
+    out += ['## Other machines (same benchmark, default band, run by teammates)', '',
+            'Geometric mean over all workloads in each file. A claim that holds on every machine is stronger than one measured on a single laptop.', '',
+            '| file | OS / arch | compiler | n | array ÷ STL | tree ÷ STL | adaptive ÷ array | adaptive heap ÷ array |', '|---|---|---|---:|---:|---:|---:|---:|']
+    def gm(v): return math.exp(sum(math.log(x) for x in v) / len(v)) if v else float('nan')
+    for f in ms:
+        d = json.load(open(f)); by = {(r['workload'], r['strategy']): r for r in d['results']}; ws = list(dict.fromkeys(r['workload'] for r in d['results']))
+        def ratio(a, b, key): return gm([by[(w, a)][key] / by[(w, b)][key] for w in ws if (w, a) in by and (w, b) in by and by[(w, b)][key] > 0])
+        e = d['env']
+        out.append(f"| {os.path.basename(f)} | {e['os']} {e['arch']} | {e['compiler'].split(' (')[0]} | {d['config']['n']:,} | {ratio('array','std','opsPerSec'):.2f}× | {ratio('tree','std','opsPerSec'):.2f}× | {ratio('adaptive','array','opsPerSec'):.2f}× | {ratio('adaptive','array','heapMB'):.2f}× |")
+    out.append('')
 open('docs/RESULTS.md', 'w').write('\n'.join(out) + '\n')
 print('wrote docs/RESULTS.md', len(out), 'lines')

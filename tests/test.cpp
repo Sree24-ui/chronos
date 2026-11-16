@@ -4,6 +4,7 @@
 #include <set>
 #include <unordered_map>
 
+#include "chronos/lobster.hpp"
 #include "chronos/baseline.hpp"
 #include "chronos/engine.hpp"
 #include "chronos/workload.hpp"
@@ -192,24 +193,8 @@ static void scenarios(const char* name, const Factory& f) {
 }
 
 // ---- randomized differential test against the O(n) reference, with invariant checks ----
-static void differential(uint64_t seedBase, int seeds, size_t n) {
-  std::printf("[differential] %d seeds x %zu cmds x all engines vs reference\n", seeds, n);
-  static const Wl kinds[] = {Wl::Uniform, Wl::Concentrated, Wl::Sparse, Wl::HighCancel, Wl::Bursty, Wl::Mixed};
-  for (int sd = 0; sd < seeds; ++sd) {
-    WlCfg wc = preset(kinds[sd % 6]);
-    wc.seed = seedBase + sd, wc.n = n, wc.band = kBand, wc.qmin = 1, wc.qmax = 30, wc.modify = 0.05;
-    Gen gen(wc);
-    std::vector<Cmd> cmds = gen.all();
-    uint64_t r = wc.seed * 7919 + 1;
-    for (auto& c : cmds) {  // inject hostile commands: duplicates, out-of-band prices, zero/neg qty, unknown ids
-      r = r * 6364136223846793005ull + 1442695040888963407ull;
-      unsigned k = (r >> 33) % 100;
-      if (k == 0 && c.kind == Kind::New) c.id = 1 + (r >> 40) % 50;      // likely duplicate
-      else if (k == 1) c.price = kBand.hi + 5;
-      else if (k == 2) c.qty = 0;
-      else if (k == 3) c.qty = -3;
-      else if (k == 4 && c.kind != Kind::New) c.id = 1000000 + k;
-    }
+// Feed one command stream to every engine and the reference: every status, every trade, and periodically the whole book must agree.
+static void compareEngines(const std::vector<Cmd>& cmds, uint64_t seed) {
     auto list = engines();
     std::vector<std::unique_ptr<Wrap>> es;
     for (auto& [nm, f] : list) es.push_back(f());
@@ -224,7 +209,7 @@ static void differential(uint64_t seedBase, int seeds, size_t n) {
         Status s = es[k]->run(c);
         bool ok = s == ref && es[k]->trades().size() == es[0]->trades().size();
         for (size_t t = 0; ok && t < es[0]->trades().size(); ++t) ok = es[k]->trades()[t].same(es[0]->trades()[t]);
-        if (!ok) { ++bad; std::printf("  MISMATCH seed=%llu op=%zu engine=%s status %s vs ref %s\n", (unsigned long long)wc.seed, i, list[k].first, name(s), name(ref)); }
+        if (!ok) { ++bad; std::printf("  MISMATCH seed=%llu op=%zu engine=%s status %s vs ref %s\n", (unsigned long long)seed, i, list[k].first, name(s), name(ref)); }
         es[k]->trades().clear();
       }
       es[0]->trades().clear();
@@ -233,11 +218,32 @@ static void differential(uint64_t seedBase, int seeds, size_t n) {
         for (size_t k = 1; k < es.size(); ++k) {
           bool same = es[k]->dump() == d0;
           std::string e = es[k]->check();
-          if (!same || !e.empty() || es[k]->active() != es[0]->active()) { ++bad; std::printf("  STATE seed=%llu op=%zu engine=%s same=%d check='%s'\n", (unsigned long long)wc.seed, i, list[k].first, same, e.c_str()); }
+          if (!same || !e.empty() || es[k]->active() != es[0]->active()) { ++bad; std::printf("  STATE seed=%llu op=%zu engine=%s same=%d check='%s'\n", (unsigned long long)seed, i, list[k].first, same, e.c_str()); }
         }
       }
     }
-    CHECK(bad == 0);
+  CHECK(bad == 0);
+}
+
+static void differential(uint64_t seedBase, int seeds, size_t n) {
+  std::printf("[differential] %d seeds x %zu cmds x all engines vs reference\n", seeds, n);
+  static const Wl kinds[] = {Wl::Uniform, Wl::Concentrated, Wl::Sparse, Wl::HighCancel, Wl::Bursty, Wl::Mixed, Wl::MarketLike};
+  for (int sd = 0; sd < seeds; ++sd) {
+    WlCfg wc = preset(kinds[sd % kNumWl]);
+    wc.seed = seedBase + sd, wc.n = n, wc.band = kBand, wc.qmin = 1, wc.qmax = 30, wc.modify = 0.05;
+    Gen gen(wc);
+    std::vector<Cmd> cmds = gen.all();
+    uint64_t r = wc.seed * 7919 + 1;
+    for (auto& c : cmds) {  // inject hostile commands: duplicates, out-of-band prices, zero/neg qty, unknown ids
+      r = r * 6364136223846793005ull + 1442695040888963407ull;
+      unsigned k = (r >> 33) % 100;
+      if (k == 0 && c.kind == Kind::New) c.id = 1 + (r >> 40) % 50;      // likely duplicate
+      else if (k == 1) c.price = kBand.hi + 5;
+      else if (k == 2) c.qty = 0;
+      else if (k == 3) c.qty = -3;
+      else if (k == 4 && c.kind != Kind::New) c.id = 1000000 + k;
+    }
+    compareEngines(cmds, wc.seed);
   }
 }
 
@@ -356,6 +362,31 @@ static void migration() {
               (unsigned long long)(ae.events().empty() ? 0 : ae.events()[0].atOp), ae.events().empty() ? "" : ae.events()[0].reason.c_str());
 }
 
+// ---- LOBSTER-format replay ----
+static void lobster() {
+  std::printf("[lobster] parse a tiny LOBSTER-format sample, then replay it on every engine vs the reference\n");
+  // time, type, id, size, price*10000, direction  (1 new, 2 partial cancel, 3 delete, 4 execution, 5 hidden)
+  const char* sample =
+      "34200.1,1,100,50,1000000,1\n34200.2,1,101,30,1000100,-1\n34200.3,1,102,20,999900,1\n"
+      "34200.4,2,100,10,1000000,1\n34200.5,4,101,30,1000100,-1\n34200.6,3,102,20,999900,1\n"
+      "34200.7,3,999,5,1000000,1\n34200.8,5,100,1,1000000,1\n34200.9,1,103,10,1000100,-1\n"
+      "34201.0,4,100,40,1000000,1\n34201.1,1,104,5,50000000,1\ngarbage line\n";
+  std::FILE* f = std::tmpfile();
+  std::fputs(sample, f), std::rewind(f);
+  LobsterStats st;
+  std::vector<Cmd> v = parseLobster(f, Band{0, 4096}, st);
+  std::fclose(f);
+  CHECK(st.lines == 11 && st.bad == 1);
+  CHECK(st.submits == 4 && st.partials == 1 && st.cancels == 1 && st.execs == 2);
+  CHECK(st.ignored == 2 && st.outOfBand == 1);  // unknown-id delete, hidden execution; $5000 outside the band
+  CHECK(v.size() == 8);
+  CHECK(v[0].price == 2048 && v[1].price == 2049 && v[2].price == 2047);  // rebased to mid-band, in cents
+  CHECK(v[3].kind == Kind::Modify && v[3].qty == 40);                      // 50 - 10
+  CHECK(v[4].type == Type::Market && v[4].side == Side::Buy && v[4].qty == 30);  // execution of a sell -> buy aggressor
+  kBand = Band{0, 4096};
+  compareEngines(v, 0);
+}
+
 int main(int argc, char** argv) {
   const int seeds = argc > 1 ? std::atoi(argv[1]) : 36;      // ./chronos_tests [seeds] [cmds-per-seed] for a longer soak
   const size_t cmds = argc > 2 ? std::strtoull(argv[2], 0, 10) : 1500;
@@ -363,6 +394,7 @@ int main(int argc, char** argv) {
   structures();
   migration();
   differential(1000, seeds, cmds);
+  lobster();
   std::printf("\n%d checks, %d failures\n", g_checks, g_fail);
   return g_fail ? 1 : 0;
 }

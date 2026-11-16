@@ -38,6 +38,10 @@ Emulated 375×812 (mobile preset) in the in-app browser against `web2`:
 - **Fixed:** below 760 px the nav is a bottom tab bar; below 1000 px the pages scroll vertically in a single column and the portal becomes a dim backdrop.
 - **Verified after the fix:** no horizontal overflow on any of the five pages (checked programmatically: document width and elements wider than the viewport outside scrollable tables); Floor shows 9 rows per side; tables scroll horizontally inside their panel.
 
+## 4a. Continuous integration (GitHub Actions, `.github/workflows/ci.yml`)
+
+Every push builds with CMake and runs CTest (correctness, soak 100x2000, benchmark consistency) on **ubuntu-latest, macos-latest and windows-latest (MSVC)**, then starts the server and does an HTTP round trip (order, fill, simulator, static page). A separate Linux job runs the soak under ASan+UBSan. All jobs passed on the commit that introduced Windows support (MSVC build and the three tests included). Not covered by CI: ThreadSanitizer, WebSocket, any browser, the benchmark's absolute numbers (shared runners are too noisy to measure performance).
+
 ## 4. Linux build (added at deployment)
 
 On `gcc:13` (Linux arm64, Docker): `server.cpp`, `test.cpp` and `bench_main.cpp` compile with `-Wall -Wextra` and no warnings; the test suite passes (365 checks, 0 failures, run during the image build); the benchmark runs and every strategy reports a consistent trade hash (`bench.hpp`'s glibc `mallinfo2` branch compiled and ran). Running container smoke test: `/api/meta`, static files, order/trade, simulator, WebSocket with depth negotiation, and `/api/bench/run` correctly refused with 403. Porting found two real defects: `SO_NOSIGPIPE` does not exist on Linux (compile error) and the server crashed rather than dropped a connection if a handler threw or a thread could not be started (now caught).
@@ -48,6 +52,19 @@ On `gcc:13` (Linux arm64, Docker): `server.cpp`, `test.cpp` and `bench_main.cpp`
 - Browsers other than the in-app one; real phones; touch interaction; widths above 1600 px (the wide layout was checked at 1600×900 and the CSS has steps for larger screens).
 - No automated UI tests; dashboard flows were checked by hand: submitting orders and Run benchmark were checked at the API level, not by clicking through every state.
 - No multi-hour memory soak (the simulator's active-order cap is the safeguard).
-- Only arm64 was tested (macOS with Apple clang; Linux with g++ 13 inside Docker, see section 4). No Windows, no x86-64, no ASan/TSan run on Linux.
+- Local runs were on arm64 (macOS Apple clang; Linux g++ 13 in Docker). Windows (MSVC) and x86-64 Linux are covered only by the CI build and tests (section 4a), nobody has run the dashboard on a Windows machine by hand. Sanitizers run on Linux in CI (ASan/UBSan); TSan was run on macOS only.
+- LOBSTER replayer: implemented from my recollection of the format (headerless CSV: time, type, id, size, price x 10000, direction; type 1 new, 2 partial cancel, 3 delete, 4 visible execution, 5 hidden, 6 cross, 7 halt) and tested only on a small hand-written sample with the same layout. A real LOBSTER file has not been replayed; confirm the layout against the official documentation before trusting results. Execution events are replayed as market orders from the opposite side and partial cancels as modifies (losing queue priority), so the replayed book is an approximation of the real one.
+- Held-out evidence is small: one new workload in two bands plus one fresh seed.
+- Phone/browser checks listed below have not been done by anyone yet.
 - The long-run behaviour of benchmark child processes started from the dashboard (cancel/kill) is not handled: a run can only finish.
 - Latency measurements on a loaded laptop: trial-to-trial variation is large (see ranges in RESULTS.md).
+
+## 6. Checklist for teammates (manual; please tick and commit)
+
+Open the live site (see README) on your own device and note what breaks. Takes ~10 minutes each.
+
+- [ ] Phone (name, model, browser): story page scrolls, "Enter the trading floor" works, Start live market works, the five tabs are reachable, nothing overflows sideways.
+- [ ] Windows laptop: build with `cmake` + Visual Studio (or use Docker), run `chronos_tests`, run `chronos_server --web web2`, open http://localhost:8080, start the market, place a limit order and a market order from the Orders page.
+- [ ] Windows laptop: run `chronos_bench --n 1000000 --trials 5 --out results/machines/<yourname>.json` and commit the JSON (see `results/machines/README.md`).
+- [ ] Firefox and Safari/Chrome: Floor page shows the book and trade tape updating.
+- [ ] Download a LOBSTER free sample (check the site's terms; do not commit the data) and run `chronos_bench --lobster <message file> --out results/lobster.json`; report whether the parser's summary line looks right.

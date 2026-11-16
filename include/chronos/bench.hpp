@@ -3,8 +3,12 @@
 // Per trial: (A) throughput pass - no per-op timing; counts heap allocations and live heap bytes.
 //            (B) latency pass    - per-op steady_clock samples; trades hashed *outside* the timed region.
 #if defined(_WIN32)
+#ifndef NOMINMAX
 #define NOMINMAX
+#endif
+#ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
+#endif
 #include <windows.h>
 #else
 #include <sys/resource.h>
@@ -156,6 +160,8 @@ struct Options {
   double buy = -1, market = -1, cancel = -1;
   int trials = 3, warmup = 1;
   AdaptCfg adapt;
+  std::vector<Cmd> replay;  // optional recorded stream (e.g. LOBSTER); replaces the generated workloads
+  std::string replayName = "replay";
   std::function<void(int, int, const std::string&)> progress;
 };
 
@@ -174,25 +180,33 @@ inline Trial runStrategy(const std::string& s, const std::vector<Cmd>& cmds, Ban
 inline std::vector<Result> run(const Options& o) {
   std::vector<Result> out;
   const int rounds = o.warmup + o.trials;
-  const int total = int(o.workloads.size()) * int(o.strategies.size()) * rounds;
+  struct Src { std::string name; std::vector<Cmd> cmds; Band band; };
+  std::vector<Src> srcs;
+  if (!o.replay.empty()) srcs.push_back({o.replayName, o.replay, o.base.band});
+  else
+    for (Wl w : o.workloads) {
+      WlCfg c = preset(w);
+      c.n = o.base.n, c.seed = o.base.seed, c.band = o.base.band, c.qmin = o.base.qmin, c.qmax = o.base.qmax;
+      if (o.buy >= 0) c.buy = o.buy;
+      if (o.market >= 0) c.market = o.market;
+      if (o.cancel >= 0) c.cancel = o.cancel;
+      srcs.push_back({wlName(w), Gen(c).all(), c.band});
+    }
+  const int total = int(srcs.size()) * int(o.strategies.size()) * rounds;
   int done = 0;
-  for (Wl w : o.workloads) {
-    WlCfg c = preset(w);
-    c.n = o.base.n, c.seed = o.base.seed, c.band = o.base.band, c.qmin = o.base.qmin, c.qmax = o.base.qmax;
-    if (o.buy >= 0) c.buy = o.buy;
-    if (o.market >= 0) c.market = o.market;
-    if (o.cancel >= 0) c.cancel = o.cancel;
-    const std::vector<Cmd> cmds = Gen(c).all();
+  for (const Src& sr : srcs) {
+    const std::vector<Cmd>& cmds = sr.cmds;
+    const Band band = sr.band;
     std::vector<std::vector<Trial>> tr(o.strategies.size());
     for (int r = 0; r < rounds; ++r)  // round-robin so drift/thermal effects hit every strategy equally
       for (size_t k = 0; k < o.strategies.size(); ++k) {
-        Trial t = runStrategy(o.strategies[k], cmds, c.band, o.adapt);
+        Trial t = runStrategy(o.strategies[k], cmds, band, o.adapt);
         if (r >= o.warmup) tr[k].push_back(std::move(t));
-        if (o.progress) o.progress(++done, total, std::string(wlName(w)) + "/" + o.strategies[k]);
+        if (o.progress) o.progress(++done, total, sr.name + "/" + o.strategies[k]);
       }
     for (size_t k = 0; k < o.strategies.size(); ++k) {
       Result R;
-      R.workload = wlName(w), R.strategy = o.strategies[k], R.n = cmds.size();
+      R.workload = sr.name, R.strategy = o.strategies[k], R.n = cmds.size();
       auto med = [&](auto f) {
         std::vector<double> v;
         for (auto& t : tr[k]) v.push_back(f(t));

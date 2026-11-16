@@ -136,3 +136,91 @@ Workloads where adaptive's and array's per-trial throughput ranges overlap (diff
 
 Consistency check: all strategies agree on every workload.
 
+## HELD-OUT: `market_like` workload (written after the thresholds were frozen), default band
+
+`bench_heldout.json` · n=1,000,000 · seed 777 · 5 trials (+1 warm-up) · band 32,768 ticks · policy v2 · Darwin 25.6.0 arm64 · Apple Clang 21.0.0 · clock read ≈ 17.2 ns
+
+| workload | strategy | Mops/s (median) | trial range | avg | p50 | p99 | p99.9 | max | heap MB | allocs | switches | consistent |
+|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|:-:|
+| market_like | STL baseline | 12.43 | 6.87–12.72 | 79 ns | 83 ns | 458 ns | 1.33 µs | 135.75 µs | 1.8 | 764,688 | 0 | yes |
+| market_like | tree | 21.20 | 3.96–21.93 | 51 ns | 42 ns | 250 ns | 792 ns | 47.83 µs | 23.4 | 22,612 | 0 | yes |
+| market_like | array | 24.00 | 18.53–24.89 | 50 ns | 42 ns | 250 ns | 792 ns | 149.12 µs | 25.8 | 6 | 0 | yes |
+| market_like | adaptive | 21.51 | 18.90–22.78 | 59 ns | 42 ns | 333 ns | 1.08 µs | 570.75 µs | 25.8 | 16,535 | 1 | yes |
+
+**Ratios (from the table above):**
+
+| workload | adaptive ÷ array (Mops/s) | adaptive ÷ tree (Mops/s) | array ÷ tree (Mops/s) | adaptive ÷ array (heap) | adaptive ÷ tree (heap) | fastest fixed |
+|---|---:|---:|---:|---:|---:|---|
+| market_like | 0.90× | 1.02× | 1.13× | 1.00× | 1.10× | array |
+
+Workloads where adaptive's and array's per-trial throughput ranges overlap (difference not distinguishable from run-to-run noise): market_like.
+
+Consistency check: all strategies agree on every workload.
+
+## HELD-OUT: `market_like`, wide band
+
+`bench_heldout_wide.json` · n=1,000,000 · seed 777 · 3 trials (+1 warm-up) · band 4,194,304 ticks · policy v2 · Darwin 25.6.0 arm64 · Apple Clang 21.0.0 · clock read ≈ 16.9 ns
+
+| workload | strategy | Mops/s (median) | trial range | avg | p50 | p99 | p99.9 | max | heap MB | allocs | switches | consistent |
+|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|:-:|
+| market_like | STL baseline | 9.63 | 8.78–12.09 | 87 ns | 83 ns | 500 ns | 1.62 µs | 230.33 µs | 1.8 | 764,690 | 0 | yes |
+| market_like | tree | 22.14 | 19.54–23.06 | 57 ns | 42 ns | 292 ns | 1.08 µs | 92.96 µs | 23.4 | 22,614 | 0 | yes |
+| market_like | array | 20.08 | 19.90–20.68 | 56 ns | 42 ns | 292 ns | 1.04 µs | 52.12 µs | 344.3 | 6 | 0 | yes |
+| market_like | adaptive | 17.62 | 10.03–17.94 | 66 ns | 42 ns | 333 ns | 1.12 µs | 8577.54 µs | 344.3 | 15,752 | 1 | yes |
+
+**Ratios (from the table above):**
+
+| workload | adaptive ÷ array (Mops/s) | adaptive ÷ tree (Mops/s) | array ÷ tree (Mops/s) | adaptive ÷ array (heap) | adaptive ÷ tree (heap) | fastest fixed |
+|---|---:|---:|---:|---:|---:|---|
+| market_like | 0.88× | 0.80× | 0.91× | 1.00× | 14.74× | tree |
+
+Workloads where adaptive's and array's per-trial throughput ranges overlap (difference not distinguishable from run-to-run noise): none.
+
+Consistency check: all strategies agree on every workload.
+
+## HELD-OUT: the original six workloads on a fresh seed (thresholds frozen)
+
+`bench_newseed.json` · n=1,000,000 · seed 2024 · 3 trials (+1 warm-up) · band 32,768 ticks · policy v2 · Darwin 25.6.0 arm64 · Apple Clang 21.0.0 · clock read ≈ 17.1 ns
+
+| workload | strategy | Mops/s (median) | trial range | avg | p50 | p99 | p99.9 | max | heap MB | allocs | switches | consistent |
+|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|:-:|
+| uniform | STL baseline | 4.96 | 3.75–5.47 | 189 ns | 166 ns | 667 ns | 2.96 µs | 7718.21 µs | 74.1 | 1,780,711 | 0 | yes |
+| uniform | tree | 6.29 | 4.86–7.44 | 173 ns | 125 ns | 750 ns | 2.79 µs | 3386.08 µs | 77.5 | 90,723 | 0 | yes |
+| uniform | array | 12.12 | 11.11–13.00 | 78 ns | 42 ns | 291 ns | 541 ns | 3517.88 µs | 77.8 | 39 | 0 | yes |
+| uniform | adaptive | 12.39 | 12.24–13.17 | 87 ns | 83 ns | 292 ns | 917 ns | 3470.00 µs | 77.8 | 11,715 | 1 | yes |
+| concentrated | STL baseline | 7.21 | 6.13–7.22 | 150 ns | 84 ns | 833 ns | 2.17 µs | 3717.79 µs | 15.3 | 1,068,314 | 0 | yes |
+| concentrated | tree | 15.04 | 14.19–16.13 | 70 ns | 42 ns | 334 ns | 791 ns | 83.79 µs | 24.0 | 6,169 | 0 | yes |
+| concentrated | array | 16.25 | 15.98–16.57 | 73 ns | 42 ns | 375 ns | 875 ns | 58.21 µs | 26.5 | 4 | 0 | yes |
+| concentrated | adaptive | 15.07 | 11.03–15.91 | 66 ns | 42 ns | 333 ns | 708 ns | 55.50 µs | 24.0 | 6,170 | 0 | yes |
+| sparse | STL baseline | 6.89 | 6.40–6.89 | 136 ns | 84 ns | 417 ns | 1.29 µs | 12669.21 µs | 56.2 | 1,594,726 | 0 | yes |
+| sparse | tree | 11.10 | 10.16–11.82 | 98 ns | 83 ns | 333 ns | 875 ns | 2365.88 µs | 49.6 | 109,646 | 0 | yes |
+| sparse | array | 15.47 | 14.43–15.67 | 72 ns | 42 ns | 250 ns | 500 ns | 2409.50 µs | 51.5 | 27 | 0 | yes |
+| sparse | adaptive | 14.24 | 12.94–15.10 | 70 ns | 42 ns | 250 ns | 500 ns | 2236.33 µs | 51.5 | 3,189 | 1 | yes |
+| high_cancel | STL baseline | 10.87 | 10.80–10.93 | 92 ns | 83 ns | 375 ns | 1.04 µs | 873.92 µs | 5.6 | 731,960 | 0 | yes |
+| high_cancel | tree | 26.46 | 22.56–27.11 | 44 ns | 42 ns | 209 ns | 459 ns | 80.71 µs | 24.0 | 5,594 | 0 | yes |
+| high_cancel | array | 27.31 | 26.62–28.35 | 42 ns | 41 ns | 208 ns | 458 ns | 39.83 µs | 26.5 | 4 | 0 | yes |
+| high_cancel | adaptive | 25.46 | 23.62–26.67 | 44 ns | 42 ns | 208 ns | 500 ns | 157.71 µs | 24.0 | 5,595 | 0 | yes |
+| bursty | STL baseline | 5.65 | 5.15–5.73 | 193 ns | 125 ns | 875 ns | 3.04 µs | 8213.62 µs | 48.7 | 1,424,325 | 0 | yes |
+| bursty | tree | 9.74 | 9.47–9.80 | 118 ns | 84 ns | 500 ns | 2.04 µs | 1782.12 µs | 46.4 | 36,431 | 0 | yes |
+| bursty | array | 14.80 | 14.60–15.15 | 73 ns | 42 ns | 292 ns | 750 ns | 1880.00 µs | 46.5 | 21 | 0 | yes |
+| bursty | adaptive | 13.17 | 13.11–14.32 | 78 ns | 42 ns | 333 ns | 708 ns | 1805.75 µs | 46.5 | 11,454 | 1 | yes |
+| mixed | STL baseline | 6.05 | 5.83–6.12 | 161 ns | 125 ns | 834 ns | 2.17 µs | 2531.00 µs | 19.0 | 1,101,823 | 0 | yes |
+| mixed | tree | 13.74 | 13.23–14.10 | 82 ns | 42 ns | 417 ns | 1.04 µs | 59.25 µs | 25.7 | 52,366 | 0 | yes |
+| mixed | array | 17.32 | 16.48–17.39 | 63 ns | 42 ns | 292 ns | 791 ns | 75.54 µs | 26.5 | 4 | 0 | yes |
+| mixed | adaptive | 17.39 | 16.77–18.25 | 62 ns | 42 ns | 292 ns | 708 ns | 209.33 µs | 26.5 | 3,794 | 1 | yes |
+
+**Ratios (from the table above):**
+
+| workload | adaptive ÷ array (Mops/s) | adaptive ÷ tree (Mops/s) | array ÷ tree (Mops/s) | adaptive ÷ array (heap) | adaptive ÷ tree (heap) | fastest fixed |
+|---|---:|---:|---:|---:|---:|---|
+| uniform | 1.02× | 1.97× | 1.93× | 1.00× | 1.00× | array |
+| concentrated | 0.93× | 1.00× | 1.08× | 0.91× | 1.00× | array |
+| sparse | 0.92× | 1.28× | 1.39× | 1.00× | 1.04× | array |
+| high_cancel | 0.93× | 0.96× | 1.03× | 0.91× | 1.00× | array |
+| bursty | 0.89× | 1.35× | 1.52× | 1.00× | 1.00× | array |
+| mixed | 1.00× | 1.27× | 1.26× | 1.00× | 1.03× | array |
+
+Workloads where adaptive's and array's per-trial throughput ranges overlap (difference not distinguishable from run-to-run noise): uniform, sparse, high_cancel, mixed.
+
+Consistency check: all strategies agree on every workload.
+

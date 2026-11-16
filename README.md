@@ -13,6 +13,7 @@ A matching engine is the part of a stock exchange that pairs buy orders with sel
 | Engine | `include/chronos/` | Header-only. Price-time priority, limit/market orders, partial fills, cancel, modify (cancel + replace), pool allocator, flat hash table, intrusive FIFO lists, tree index and array+bitmap index. |
 | Baselines | `include/chronos/baseline.hpp` | `StdEngine` (idiomatic STL, the benchmark baseline) and `RefEngine` (O(n) scan, the correctness oracle). |
 | CHRONOS-ADAPT | `include/chronos/adaptive.hpp`, `engine.hpp` | Batch-boundary monitor, switching policy, validated migration. |
+| CI | `.github/workflows/ci.yml` | Build + tests on Linux, macOS, Windows; sanitizer job; server smoke test. |
 | Tests | `tests/test.cpp` | Scenarios + structure tests + randomized differential tests vs. the reference, with invariant checks and random mid-stream migrations. |
 | Benchmarks | `src/bench_main.cpp`, `include/chronos/bench.hpp` | Same command stream replayed on four strategies; warm-up, repeated trials, latency percentiles, allocation counts, memory, JSON/CSV export. |
 | Gateway | `src/server.cpp` | C++ HTTP + WebSocket server (loopback only, no auth). REST for commands, batched WebSocket snapshots for live data. |
@@ -56,6 +57,23 @@ Run it from the project root (it serves `web2/` and reads `results/` relative to
 ## Deploy
 
 `Dockerfile` + `render.yaml` run the dashboard on a host such as Render: `docker build -t chronos . && docker run -p 8080:8080 chronos`. The image builds with g++ 13, runs the test suite during the build, serves `web2/` and the three stored result files, listens on `$PORT` / `0.0.0.0`, **disables live benchmark runs** (`--bench none`, they would let any visitor burn CPU), caps the book at 200k resting orders and pauses the simulator 2 minutes after the last viewer leaves. There is **no authentication**: every visitor shares one engine and can start/stop the simulator or reset the book. Use it as a demo, not as a service.
+
+## Windows
+
+CI builds and tests on Windows (MSVC) on every push. Locally: install Visual Studio (C++ workload) and CMake, then
+
+```powershell
+cmake -S . -B build
+cmake --build build --config Release
+ctest --test-dir build -C Release --output-on-failure
+.\build\Release\chronos_server.exe --web web2     # open http://localhost:8080
+```
+
+Not yet run by hand on a Windows machine: the dashboard. The Lab page's "run benchmark" starts `./build/chronos_bench`, a Unix-style path: on Windows run `chronos_bench.exe` from a terminal instead. Alternatively use WSL or Docker (`docker build -t chronos . && docker run -p 8080:8080 chronos`). The heap-bytes metric is only tracked inside `chronos_bench` on Windows; the dashboard shows 0 there.
+
+## Real market data (optional)
+
+`chronos_bench --lobster <message file> --out results/lobster.json` replays a [LOBSTER](https://lobsterdata.com)-format message file (free samples are offered by the provider; check its terms and do not commit the data). The replayer was written from documentation and tested only on a small hand-written sample; see docs/TESTING.md.
 
 ## Test
 

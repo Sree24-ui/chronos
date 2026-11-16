@@ -1,20 +1,24 @@
 #pragma once
 // Deterministic synthetic workload generator (own PRNG: same seed => same stream on every platform).
+#include <algorithm>
 #include <cmath>
 #include <cstring>
 #include <string>
+#include <vector>
 
 #include "types.hpp"
 
 namespace chronos {
 
-enum class Wl { Uniform, Concentrated, Sparse, HighCancel, Bursty, Mixed };
+// MarketLike was added after the switching thresholds were frozen: it is the held-out workload.
+enum class Wl { Uniform, Concentrated, Sparse, HighCancel, Bursty, Mixed, MarketLike };
+inline constexpr int kNumWl = 7;
 inline const char* wlName(Wl w) {
-  static const char* n[] = {"uniform", "concentrated", "sparse", "high_cancel", "bursty", "mixed"};
+  static const char* n[] = {"uniform", "concentrated", "sparse", "high_cancel", "bursty", "mixed", "market_like"};
   return n[int(w)];
 }
 inline bool wlParse(const std::string& s, Wl& out) {
-  for (int i = 0; i < 6; ++i)
+  for (int i = 0; i < kNumWl; ++i)
     if (s == wlName(Wl(i))) return out = Wl(i), true;
   return false;
 }
@@ -39,6 +43,7 @@ inline WlCfg preset(Wl k) {
     case Wl::HighCancel: c.market = 0.03, c.cancel = 0.60; break;
     case Wl::Bursty: c.market = 0.04, c.cancel = 0.15; break;
     case Wl::Mixed: c.market = 0.08, c.cancel = 0.30, c.modify = 0.02; break;
+    case Wl::MarketLike: c.market = 0.06, c.cancel = 0.45, c.modify = 0.03; break;
   }
   return c;
 }
@@ -47,6 +52,8 @@ class Gen {
   WlCfg c_;
   uint64_t s_, i_ = 0, nextId_ = 1;
   double mid_;
+  bool vol_ = false, lastBuy_ = true;  // MarketLike: volatility regime, last order side
+  uint64_t regimeLeft_ = 0;
   Price anchors_[2][40];
   uint64_t rnd() {
     uint64_t z = (s_ += 0x9E3779B97F4A7C15ull);
@@ -73,6 +80,7 @@ class Gen {
         double r = u();
         return r < 0.7 ? conc(15) : r < 0.9 ? conc(400) : wide();
       }
+      case Wl::MarketLike: return 0;  // handled by nextMarket()
     }
     return 0;
   }
@@ -83,7 +91,42 @@ class Gen {
       for (auto& a : side) a = 1 + Price(u() * double((c_.band.hi - c_.band.lo) / 2 - 2));  // fixed sparse price set
   }
   Id nextId() const { return nextId_; }
+  // Market-like stream built from commonly reported stylized facts (not calibrated to any dataset): volatility
+  // clustering (quiet/volatile regimes), exponential + power-law-tail limit distances from the mid, a few crossing
+  // orders, persistent order-flow sign, log-normal sizes with round-lot bias, and most cancels hitting recent orders.
+  Cmd nextMarket(uint64_t ts) {
+    ++i_;
+    if (regimeLeft_ == 0) vol_ = u() < 0.3, regimeLeft_ = 5000 + below(30000);
+    --regimeLeft_;
+    if (u() < (vol_ ? 0.15 : 0.02)) mid_ += (u() < 0.5 ? -1.0 : 1.0) * (vol_ ? 1.0 + double(below(3)) : 1.0);
+    const double lim = double(c_.band.hi - c_.band.lo) / 8, centre = double(c_.band.lo + c_.band.hi) / 2;
+    mid_ = std::fmax(centre - lim, std::fmin(centre + lim, mid_));
+    Cmd c;
+    c.ts = ts;
+    const double r = u();
+    if (nextId_ > 1 && r < c_.cancel + c_.modify) {
+      const uint64_t age = std::min<uint64_t>(nextId_ - 2, uint64_t(-std::log(1.0 - u()) * 400.0));
+      c.id = nextId_ - 1 - age;
+      if (r < c_.cancel) return c.kind = Kind::Cancel, c;
+      c.kind = Kind::Modify;
+    } else c.kind = Kind::New, c.id = nextId_++;
+    if (u() >= 0.6) lastBuy_ = u() < 0.5;  // order-flow signs persist
+    c.side = lastBuy_ ? Side::Buy : Side::Sell;
+    static const Qty lots[4] = {100, 200, 500, 1000};
+    c.qty = u() < 0.3 ? lots[below(4)] : std::max<Qty>(1, std::min<Qty>(5000, Qty(std::exp(3.0 + 0.9 * gauss()))));
+    if (c.kind == Kind::New && u() < c_.market) return c.type = Type::Market, c;
+    const double d = u();
+    const Price W = (c_.band.hi - c_.band.lo) / 2;
+    Price off = d < 0.08 ? -Price(1 + below(3))  // crossing limit order
+              : d < 0.68 ? 1 + Price(-std::log(1.0 - u()) * 3.0)
+              : d < 0.93 ? 1 + Price(-std::log(1.0 - u()) * 25.0)
+                         : std::min<Price>(W, Price(20.0 / std::pow(1.0 - u(), 1.0 / 1.2)));  // heavy tail
+    Price p = Price(mid_) + (c.side == Side::Buy ? -off : off);
+    c.price = std::max(c_.band.lo, std::min(c_.band.hi - 1, p));
+    return c;
+  }
   Cmd next(uint64_t ts = 0) {
+    if (c_.kind == Wl::MarketLike) return nextMarket(ts);
     ++i_;
     if (below(100) == 0) mid_ += (u() < 0.5 ? -1 : 1);  // slow random walk of the mid price
     const double lim = double(c_.band.hi - c_.band.lo) / 8;

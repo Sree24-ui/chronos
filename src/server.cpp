@@ -3,8 +3,12 @@
 // The engine lives behind one mutex; the simulator/REST handlers take it per small chunk and the
 // broadcaster takes it for ~microseconds to copy a snapshot. Rendering happens in the browser.
 #if defined(_WIN32)
+#ifndef NOMINMAX
 #define NOMINMAX
+#endif
+#ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
+#endif
 #include <winsock2.h>
 #include <ws2tcpip.h>
 #ifdef _MSC_VER
@@ -411,7 +415,7 @@ static void handleApi(int fd, const std::string& method, const std::string& path
   }
   if (method == "GET" && path == "/api/meta") {
     std::string wl;
-    for (int i = 0; i < 6; ++i) wl += (i ? ",\"" : "\"") + std::string(wlName(Wl(i))) + "\"";
+    for (int i = 0; i < kNumWl; ++i) wl += (i ? ",\"" : "\"") + std::string(wlName(Wl(i))) + "\"";
     return reply(fd, 200, "application/json",
                  "{\"band\":[" + std::to_string(gBand.lo) + "," + std::to_string(gBand.hi) + "],\"workloads\":[" + wl + "],\"modes\":[\"adaptive\",\"tree\",\"array\"],\"strategies\":[\"std\",\"tree\",\"array\",\"adaptive\"],"
                  "\"limits\":{\"maxQty\":" + std::to_string(uint64_t(kMaxQty)) + ",\"maxRate\":" + std::to_string(uint64_t(kMaxRate)) + ",\"maxCancel\":" + std::to_string(kMaxCancel) + ",\"minBenchN\":" +
