@@ -15,7 +15,7 @@ Limits and defaults are not hardcoded in the dashboard: it reads them from `GET 
 | `POST /api/cancel` | `id` | `{status, trades[]}` (`cancelled` or `rej_not_found`). |
 | `POST /api/modify` | `id`, `price`, `qty` | Cancel + replace. The replacement gets a new sequence number (loses queue priority) and may trade immediately. |
 | `POST /api/engine` | `mode` adaptive\|tree\|array | Replaces the engine (book reset). |
-| `POST /api/sim` | `action` start\|stop; start also takes `workload`, `rate`, `seed`, optional `cancel` | Starting resets the book (generator ids restart at 1). The simulator stops itself at `--max-active` resting orders and reports `simNote`. |
+| `POST /api/sim` | `action` start\|stop; start also takes `workload`, `rate`, `seed`, optional `cancel` | Starting resets the book (generator ids restart at 1). The feed stops itself at `--max-active` resting orders and reports `simNote`. |
 | `POST /api/bench/run` | `workload` (name or `all`), `n`, `trials`, `strategies` (comma list), optional `cancel` 0..0.95 | Starts `chronos_bench` as a child process and pauses the live simulator. 409 if one is running. |
 | `GET /api/bench/status` | – | `{running, done, total, label, file, error}`. |
 | `GET /api/bench/list` | – | Result file names in the results directory. |

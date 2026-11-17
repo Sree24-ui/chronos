@@ -223,7 +223,7 @@ static void simLoop() {
       for (uint64_t i = 0; i < k; ++i) exec(L.gen->next(wallUs()));
       left -= k;
       if (L.e->active() > gMaxActive) {  // safety valve: an unbounded synthetic book would eventually exhaust memory
-        L.sim = false, L.note = "simulator stopped: book reached " + std::to_string(gMaxActive) + " resting orders (raise --max-active)";
+        L.sim = false, L.note = "feed stopped: book reached " + std::to_string(gMaxActive) + " resting orders (raise --max-active)";
         break;
       }
     }
@@ -529,7 +529,7 @@ static void handleApi(int fd, const std::string& method, const std::string& path
     if (hasCancel) cmd += " --cancel " + std::to_string(cancel);
     BS.running = true, BS.done = 0, BS.total = 0, BS.error.clear(), BS.file.clear();
     std::thread(benchThread, cmd, file).detach();
-    return reply(fd, 200, "application/json", "{\"ok\":true,\"file\":\"" + file + "\",\"note\":\"live simulator paused while the benchmark runs\"}");
+    return reply(fd, 200, "application/json", "{\"ok\":true,\"file\":\"" + file + "\",\"note\":\"live feed paused while the benchmark runs\"}");
   }
   err(fd, 404, "not found");
 }
@@ -594,7 +594,7 @@ static void broadcaster() {
       if (gWs.empty()) {
         if (gIdleStop && ++idle >= gIdleStop * 4) {
           std::lock_guard<std::mutex> ll(L.m);
-          if (L.sim) L.sim = false, L.note = "simulator paused: nobody was watching";
+          if (L.sim) L.sim = false, L.note = "feed paused: nobody was watching";
         }
         continue;
       }
