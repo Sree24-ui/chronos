@@ -41,10 +41,11 @@ function spawn() { const side = Math.random() < .5 ? 0 : 1, lanes = V.view === '
   const x0 = V.view === 'floor' && V.geo ? (side ? V.geo.r : V.geo.l) : side ? W + 10 : -10, y0 = lanes ? H * (.2 + .6 * Math.floor(Math.random() * 8) / 7) : H * (.12 + Math.random() * .7);
   V.parts.push({ x: x0, y: y0, px: x0, py: y0, side, s: .012 + Math.random() * .014 }); }
 function frame(t) {
+  requestAnimationFrame(frame); tween();  // reschedule + update numbers first: a failed draw must not freeze the stat tiles
   if (!RM) V.rot += .0016; const T = target(); for (const k of ['cx', 'cy', 'R', 'a']) V[k] += (T[k] - V[k]) * .07;
   const scT = V.view === 'stage' ? (V.p > 1.5 && V.p < 2.5 ? .86 : V.p > 3.5 ? 1.12 : 1) : 1; V.sc += (scT - V.sc) * .05;
   g.globalAlpha = 1; g.fillStyle = '#000'; g.fillRect(0, 0, W, H);
-  g.drawImage(aurora, 0, 0, W, H);
+  if (aurora.width && aurora.height) g.drawImage(aurora, 0, 0, W, H);  // 0-size canvas (page loaded in a hidden/zero-size window) throws
   for (const s of stars) { const x = (((s.x * W - (V.mx - .5) * 40 * s.z) % W) + W) % W, y = s.y * H - (V.my - .5) * 24 * s.z; g.globalAlpha = (.25 + .45 * Math.abs(Math.sin(t / 1800 + s.t))) * s.z * (V.view === 'stage' ? 1 : .6); g.fillStyle = '#fff'; g.fillRect(x, y, s.z * 1.6, s.z * 1.6); }
   const cx = V.cx + (V.mx - .5) * 22, cy = V.cy + (V.my - .5) * 14, R = V.R * V.sc, A = V.a;
   g.globalAlpha = A;
@@ -61,8 +62,6 @@ function frame(t) {
     if (d < R * .9) { V.parts.splice(i, 1); if (V.tradeQ >= 1) { V.tradeQ--; V.pulses.push({ r: R * .9, a: .9 }); } } }
   for (let i = V.pulses.length - 1; i >= 0; i--) { const u = V.pulses[i]; u.r += R * .018; u.a -= .014; if (u.a <= 0) { V.pulses.splice(i, 1); continue; } g.strokeStyle = `rgba(255,255,255,${u.a * A})`; g.lineWidth = 1.5; g.beginPath(); g.arc(cx, cy, u.r, 0, 6.2832); g.stroke(); }
   g.globalAlpha = 1;
-  tween();
-  requestAnimationFrame(frame);
 }
 
 // ====================================================================== live state
